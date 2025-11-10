@@ -173,7 +173,26 @@ def main():
     if len(sys.argv) == 1:
         print("No images provided. Opening webcam to capture front and side photos.")
         front, side = capture_two_photos()
+
+        # Ask user for height to improve estimate
         height = None
+        while True:
+            try:
+                s = input("Enter height in cm (press Enter to use default 170): ").strip()
+            except EOFError:
+                # In non-interactive environments, fall back to default
+                s = ""
+            if s == "":
+                height = None
+                break
+            try:
+                height = float(s)
+                if height <= 0:
+                    print("Please enter a positive number.")
+                    continue
+                break
+            except ValueError:
+                print("Invalid input. Please enter height as a number (e.g. 175).")
     else:
         if len(sys.argv) < 2:
             print("Usage: python estimate_size.py front.jpg [side.jpg] [height_cm]")
@@ -205,3 +224,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
