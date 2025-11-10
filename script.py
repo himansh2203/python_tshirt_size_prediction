@@ -3,6 +3,8 @@ import mediapipe as mp
 import numpy as np
 import math
 import sys
+import os
+from datetime import datetime
 
 mp_pose = mp.solutions.pose
 
@@ -123,21 +125,69 @@ def chest_to_size(chest_cm):
         return SIZE_TABLE[0][0]
     return SIZE_TABLE[-1][0]
 
+# --- New: capture two photos from webcam ---
+def capture_two_photos(save_dir=None):
+    if save_dir is None:
+        save_dir = os.getcwd()
+    os.makedirs(save_dir, exist_ok=True)
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        raise RuntimeError("Cannot open webcam.")
+    captured_paths = []
+    stage = 0  # 0 = front, 1 = side
+    instructions = ["Front photo: press SPACE to capture, ESC to quit",
+                    "Side photo: press SPACE to capture, ESC to quit"]
+    cv2.namedWindow("Capture", cv2.WINDOW_NORMAL)
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            display = frame.copy()
+            text = instructions[stage]
+            cv2.putText(display, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            cv2.imshow("Capture", display)
+            key = cv2.waitKey(1) & 0xFF
+            if key == 27:  # ESC
+                break
+            if key == 32:  # SPACE - capture
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                fname = f"capture_{'front' if stage==0 else 'side'}_{ts}.jpg"
+                path = os.path.join(save_dir, fname)
+                cv2.imwrite(path, frame)
+                print(f"Saved {path}")
+                captured_paths.append(path)
+                stage += 1
+                if stage >= 2:
+                    break
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+    if len(captured_paths) < 2:
+        raise RuntimeError("Two photos not captured.")
+    return captured_paths[0], captured_paths[1]
+
 # --- Command-line usage ---
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python estimate_size.py front.jpg [side.jpg] [height_cm]")
-        sys.exit(1)
-    front = sys.argv[1]
-    side = sys.argv[2] if len(sys.argv) >= 3 and not sys.argv[2].isdigit() else None
-    height = None
-    if len(sys.argv) >= 3:
-        # if 2nd arg was side image and 3rd exists and is a number -> height
-        if side and len(sys.argv) >= 4 and sys.argv[3].isdigit():
-            height = float(sys.argv[3])
-        # if 2nd arg is actually height (number)
-        elif sys.argv[2].isdigit():
-            height = float(sys.argv[2])
+    # If no args provided, open camera to capture two photos.
+    if len(sys.argv) == 1:
+        print("No images provided. Opening webcam to capture front and side photos.")
+        front, side = capture_two_photos()
+        height = None
+    else:
+        if len(sys.argv) < 2:
+            print("Usage: python estimate_size.py front.jpg [side.jpg] [height_cm]")
+            sys.exit(1)
+        front = sys.argv[1]
+        side = sys.argv[2] if len(sys.argv) >= 3 and not sys.argv[2].isdigit() else None
+        height = None
+        if len(sys.argv) >= 3:
+            # if 2nd arg was side image and 3rd exists and is a number -> height
+            if side and len(sys.argv) >= 4 and sys.argv[3].isdigit():
+                height = float(sys.argv[3])
+            # if 2nd arg is actually height (number)
+            elif sys.argv[2].isdigit():
+                height = float(sys.argv[2])
 
     res = estimate_measurements(front, side, height)
     chest = res["chest_cm_est"]
